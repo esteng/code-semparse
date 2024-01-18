@@ -84,7 +84,10 @@ def get_dataset(dataset_name: str, split_name: str, eval_set: str = None, domain
         with open(split_path, "r") as f:
             split = json.load(f)
             train_qids = split["train"]
-            train_examples = [converted_example_subset[qid] for qid in train_qids if qid in qid_to_example_train]
+            if special_path is not None:
+                train_examples = [converted_example_subset[qid] for qid in train_qids if qid in qid_to_example_train]
+            else:
+                train_examples = [qid_to_example_train[qid] for qid in train_qids if qid in qid_to_example_train]
 
             if eval_set is None:
                 if "dev" in split:
@@ -99,7 +102,6 @@ def get_dataset(dataset_name: str, split_name: str, eval_set: str = None, domain
                 test_set_name = eval_set
 
             print(f"Loading {test_set_name} set for {dataset_name}/{split_name}")
-
             test_qids = split[test_set_name]
             test_examples = [qid_to_example_test[qid] for qid in test_qids if qid in qid_to_example_test]
 

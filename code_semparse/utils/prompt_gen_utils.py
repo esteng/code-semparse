@@ -4,7 +4,8 @@ from prompts.prompt_templates import MAIN_TEMPLATE, DEMONSTRATIONS_TEMPLATE, TEM
     PY_TO_PL_DEMONSTRATIONS_TEMPLATE, PL_TO_PY_DEMONSTRATIONS_TEMPLATE, PL_TO_PY_TEMPLATE, PY_TO_PL_TEMPLATE
 
 
-def create_prompt(ex: Dict, prompt_lang: str, prompt_type: str, demonstrations: List[Dict], dataset_name: str, program_variation: str = None) -> str:
+def create_prompt(ex: Dict, prompt_lang: str, prompt_type: str, demonstrations: List[Dict], dataset_name: str, program_variation: str = None,
+                  helper_function_text: str = None) -> str:
     prompt = MAIN_TEMPLATE
 
     demonstration_target_type = prompt_lang
@@ -12,9 +13,14 @@ def create_prompt(ex: Dict, prompt_lang: str, prompt_type: str, demonstrations: 
         demonstration_target_type = f"{prompt_lang}_{program_variation}"
 
     if prompt_type != "no_dd":
+        if helper_function_text is not None and prompt_type == "full_dd":
+            prompt_type = "full_dd_w_helper"
         prompt = prompt.replace("{{structure}}", STRUCTURE_TEMPLATE)
         prompt = prompt.replace("{{structures_for_method}}",
                                 TEMPLATE_PER_DATASET[dataset_name]["structure_per_method"][prompt_lang][prompt_type])
+        # add the helper functions 
+        if helper_function_text:
+            prompt = prompt.replace("{{helper_functions}}", helper_function_text)
     else:
         prompt = prompt.replace("{{structure}}\n", "")
 

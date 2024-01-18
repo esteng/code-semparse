@@ -4,7 +4,7 @@ from typing import Callable
 from eval.geo880.funql import evaluate_geo_funql
 # from eval.geo880.python import evaluate_geo_python
 from eval.overnight.dcs import evaluate_overnight_dcs
-from eval.overnight.python import evaluate_overnight_python
+from eval.overnight.python import evaluate_overnight_python, evaluate_overnight_python_node
 from eval.pl_to_python import GPTPLToPythonConverter
 from eval.smcalflow.simplified import evaluate_smcalflow_simplified
 from eval.smcalflow.dataflow import evaluate_smcalflow_dataflow
@@ -56,7 +56,7 @@ dataset_and_mr_to_eval_func = {
         "dcs_simplified": evaluate_overnight_dcs,
         "scala": evaluate_pl(evaluate_overnight_python),
         "javascript": evaluate_pl(evaluate_overnight_python),
-        "python": evaluate_overnight_python,
+        "python": evaluate_overnight_python_node,
     }
 }
 

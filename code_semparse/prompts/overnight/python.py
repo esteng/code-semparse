@@ -28,7 +28,44 @@ class API:
         ...
 
 api = API()
-```""", "no_typing": """"
+```""", 
+"full_dd_w_helper": """"
+```python
+Gender = Enum('Gender', 'male,female')
+RelationshipStatus = Enum('RelationshipStatus', 'single,married')
+Education = NamedTuple('Education', [('university', str), ('field_of_study', str), ('start_date', int), ('end_date', int)])
+Employment = NamedTuple('Employment', [('employer', str), ('job_title', str), ('start_date', int), ('end_date', int)])
+
+@dataclass
+class Person:
+    name: str
+    gender: Gender
+    relationship_status: RelationshipStatus
+    height: int
+    birthdate: int
+    birthplace: str
+    friends: List['Person'] = None
+    logged_in: bool = False
+
+    education: List[Education] = None
+    employment: List[Employment] = None
+
+
+@dataclass
+class API:
+    people: List[Block]
+    
+    def find_person_by_id(self, block_id: str) -> Person:
+        ...
+
+api = API()
+```
+You can also use the following helper functions to help you write your code:
+```
+{{helper_functions}}
+```
+""",
+"no_typing": """"
 ```python
 Gender = Enum('Gender', 'male,female')
 RelationshipStatus = Enum('RelationshipStatus', 'single,married')

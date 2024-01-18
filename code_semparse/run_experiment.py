@@ -1,5 +1,6 @@
 import argparse
 import os
+import re 
 from random import Random
 from typing import Dict, List
 from pathlib import Path 
@@ -20,6 +21,9 @@ from demonstrations_selection.fixed_random import FixedRandomDemonstrationsSelec
 from demonstrations_selection.demonstrations_selector import DemonstrationsSelector
 
 from program_refactoring.agent.agent_main import read_data_from_logdir
+from program_refactoring.domains.overnight.utils import get_func_names
+from program_refactoring.codebank.codebank import CodeBank
+from program_refactoring.codebank.test_case import OvernightTestCase
 
 def get_args():
     args = argparse.ArgumentParser()
@@ -41,15 +45,40 @@ def get_args():
     args.add_argument("--special_path", type=str, default=None)
     return args.parse_args()
 
+def get_helper_functions(log_demonstrations, codebank):
+    helper_function_text = "# Helper functions\n\n"
+    all_funcs_used = []
+    for d in log_demonstrations:
+        functions_used = get_func_names(d["python"])
+        all_funcs_used += functions_used
+    # limit to 20 helper funcs
+    for f in list(set(all_funcs_used))[0:20]: 
+        code = codebank._codebank[f]._original_code
+        helper_function_text += code + "\n"
 
-def evaluate_prompt_on_set(demonstrations_selector: DemonstrationsSelector, test_examples: List[Dict], model: str, datatset_name: str,
-                           prompt_lang: str, prompt_method: str, program_variation: str = None) -> List[Dict]:
+
+
+    return helper_function_text
+
+
+def evaluate_prompt_on_set(demonstrations_selector: DemonstrationsSelector, 
+                           log_demonstrations_selector: DemonstrationsSelector,
+                           test_examples: List[Dict], model: str, datatset_name: str,
+                           prompt_lang: str, prompt_method: str, program_variation: str = None,
+                           codebank: CodeBank = None) -> List[Dict]:
     demonstrations = []
     prompts_for_examples = []
     for ex in tqdm(test_examples):
         ex_demonstrations = demonstrations_selector.pick_demonstrations(ex)
+        if log_demonstrations_selector is not None:
+            log_demonstrations = log_demonstrations_selector.pick_demonstrations(ex)
+            helper_function_text = get_helper_functions(log_demonstrations, codebank)
+            ex_demonstrations += log_demonstrations
+            # pdb.set_trace() 
+        else:
+            helper_function_text = None
         demonstrations.append(ex_demonstrations)
-        prompts_for_examples.append(create_prompt(ex, prompt_lang, prompt_method, ex_demonstrations, datatset_name, program_variation))
+        prompts_for_examples.append(create_prompt(ex, prompt_lang, prompt_method, ex_demonstrations, datatset_name, program_variation, helper_function_text))
     model_predictions = complete_all(prompts_for_examples, model, stop="```")
 
     results = []
@@ -92,8 +121,11 @@ def convert_read_data(logdir_training_set, dcs_lut):
     for ex in logdir_training_set:
         qid = ex.id.split(":")[1]
         dcs, dcs_simple, original = dcs_lut[qid]
+        program = ex.program
+        program = re.sub("from .*import.*", "", program)
         d = {"query": ex.query,
              "qid": qid,
+             "python": program, 
              "dcs": dcs,
              "domain": "socialnetwork",
              "original": original,
@@ -125,19 +157,31 @@ def run_experiment(dataset_name: str, split_name: str, n_training_demonstrations
     if logdir is not None:
         # get dcs lookup
         dcs_lut = {x['qid']: (x['dcs'], x['dcs_simplified'], x['original']) for x in training_set}
-
+        # get logdir training data 
         logdir_training_set = read_data_from_logdir(logdir, task_type="overnight")
         logdir_training_set = convert_read_data(logdir_training_set, dcs_lut)
+        # read codebank 
+        logdir = Path(logdir)
+        codebank = CodeBank.load(logdir / "codebank.py",
+                                 logdir / "success_info.json",
+                                 logdir / "test_cases.jsonl",
+                                 "overnight",
+                                 None,
+                                 "temp",
+                                 "temp",
+                                 tc_class=OvernightTestCase,
+                                 task="overnight")
+        codebank.write_to_file()
         # filter 
         n_log_demonstrations = int(n_training_demonstrations * budget_split)
         n_training_demonstrations = n_training_demonstrations - n_log_demonstrations
 
-        
-        log_demostrations_selector = get_demonstrations_selector(icl_selection_method, logdir_training_set, n_log_demonstrations, prompt_lang, seed=seed)
+        log_demonstrations_selector = get_demonstrations_selector(icl_selection_method, logdir_training_set, n_log_demonstrations, prompt_lang, seed=seed)
         main_demonstrations_selector = get_demonstrations_selector(icl_selection_method, training_set, n_training_demonstrations, prompt_lang, seed=seed)
 
     else:
-        log_demostrations_selector = None
+        log_demonstrations_selector = None
+        codebank=None
         main_demonstrations_selector = get_demonstrations_selector(icl_selection_method, training_set, n_training_demonstrations, prompt_lang, seed=seed)
 
     sampled_test_set = Random(test_seed).sample(test_set, min(n_test_samples, len(test_set)))
@@ -146,7 +190,15 @@ def run_experiment(dataset_name: str, split_name: str, n_training_demonstrations
 
     print(
         f"Running {prompt_method} prompt on {n_test_samples} examples from {dataset_name}, {split_name} split")
-    results = evaluate_prompt_on_set(main_demonstrations_selector, sampled_test_set, model, dataset_name, prompt_lang, prompt_method, program_variation)
+    results = evaluate_prompt_on_set(main_demonstrations_selector, 
+                                     log_demonstrations_selector, 
+                                     sampled_test_set, 
+                                     model, 
+                                     dataset_name, 
+                                     prompt_lang, 
+                                     prompt_method, 
+                                     program_variation,
+                                     codebank=codebank)
 
     # save to csv
     df = pd.DataFrame(results)

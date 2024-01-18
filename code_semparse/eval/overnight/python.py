@@ -1,8 +1,11 @@
 import re
+import pdb 
 
 from eval.overnight.data.datamodel import Person, API
 from eval.overnight.dcs import execute_dcs, reverse_simplify_expr
 from eval.overnight.run_program import run_program
+
+from program_refactoring.tree.node import OvernightNode
 
 
 def parse_gold_answer(gold_answer):
@@ -19,6 +22,37 @@ def value_to_string(value):
     elif type(value) is int:
         return str(value)
 
+def evaluate_overnight_python_node(prediction, ex, prompt_method):
+    node = OvernightNode(query = ex['query'], program = prediction, type='pred', name=ex['qid'], temp_dir="temp")
+    result = node.execute(use_pkl=True)
+
+    # pdb.set_trace()
+    gold_answer = execute_dcs(ex["dcs"], ex["domain"])
+
+    parsed_pred_answer = set()
+    if result is not None:
+        parsed_pred_answer = value_to_string(result) 
+        if type(parsed_pred_answer) is list:
+            if any(type(item) is not str for item in parsed_pred_answer):
+                parsed_pred_answer = None
+            else:
+                parsed_pred_answer = set(parsed_pred_answer)
+    parsed_gold_answer = parse_gold_answer(gold_answer)
+
+    if type(parsed_pred_answer) is set and len(parsed_pred_answer) == 1:
+        parsed_pred_answer = list(parsed_pred_answer)[0]
+    if type(parsed_gold_answer) is set and len(parsed_gold_answer) == 1:
+        parsed_gold_answer = list(parsed_gold_answer)[0]
+
+    denotation_accuracy = parsed_pred_answer == parsed_gold_answer
+
+    return {
+        "accuracy": int(denotation_accuracy),
+        "denotation_accuracy": int(denotation_accuracy),
+        "gold_denotation": list(parsed_gold_answer) if type(parsed_gold_answer) is set else parsed_gold_answer,
+        "predicted_denotation": list(parsed_pred_answer) if parsed_pred_answer and type(parsed_pred_answer) is set else parsed_pred_answer,
+        "error": None,
+    }
 
 def evaluate_overnight_python(prediction, ex, prompt_method):
     exec_result = run_program(prediction)
