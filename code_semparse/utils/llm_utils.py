@@ -20,7 +20,7 @@ dotenv.load_dotenv()
 logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 logger = logging.getLogger(__name__)
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
+# openai.api_key = os.getenv("OPENAI_API_KEY")
 
 
 def cache(list_key):
@@ -113,14 +113,29 @@ def complete_prompts(prompts, model_name, stop=None):
 
         completion_func = completion_with_backoff_chat
 
+        openai.api_key = os.environ.get("AZURE_API_KEY")
+        openai.api_base = "https://instance-east-us2.openai.azure.com/"
+        openai.api_type = "azure"
+        openai.api_version = "2023-05-15"
+        # openai.api_version = 
+        if model_name == "gpt-3.5-turbo":
+            deployment_name = "gpt-35-turbo-16k" 
         completions = completion_func(
-            model=model_name,
+            engine=deployment_name, 
             messages=[{"role": "user", "content": prompts[0]}],
             max_tokens=500,
             stop=stop,
             temperature=0,
             request_timeout=60,
-        )
+        ) 
+        # completions = completion_func(
+        #     model=model_name,
+        #     messages=[{"role": "user", "content": prompts[0]}],
+        #     max_tokens=500,
+        #     stop=stop,
+        #     temperature=0,
+        #     request_timeout=60,
+        # )
 
         return [{"text": completions["choices"][0]["message"]["content"]}]
     elif "davinci" in model_name:

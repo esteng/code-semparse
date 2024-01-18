@@ -61,6 +61,20 @@ def get_helper_functions(log_demonstrations, codebank):
     return helper_function_text
 
 
+def filter_training_data(training_data, codebank):
+    final_data = []
+    for ex in training_data:
+        program = ex['python']
+        funcs_used = get_func_names(program)
+        skip = False
+        for f in funcs_used:
+            if f not in codebank._codebank:
+                print(f"removed {f} example from training data: \n{program}")
+                skip=True
+        if not skip:
+            final_data.append(ex)
+    return final_data
+
 def evaluate_prompt_on_set(demonstrations_selector: DemonstrationsSelector, 
                            log_demonstrations_selector: DemonstrationsSelector,
                            test_examples: List[Dict], model: str, datatset_name: str,
@@ -171,6 +185,9 @@ def run_experiment(dataset_name: str, split_name: str, n_training_demonstrations
                                  "temp",
                                  tc_class=OvernightTestCase,
                                  task="overnight")
+        if do_filter:
+            codebank.filter(round_idx=-1, success_thresh=0, min_usage=4, keep_low_usage=True, max_round_delta=40)
+            logdir_training_set = filter_training_data(logdir_training_set, codebank)
         codebank.write_to_file()
         # filter 
         n_log_demonstrations = int(n_training_demonstrations * budget_split)
@@ -202,6 +219,7 @@ def run_experiment(dataset_name: str, split_name: str, n_training_demonstrations
 
     # save to csv
     df = pd.DataFrame(results)
+    df['logdir'] = str(logdir)
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     print(df.select_dtypes(include=np.number).mean())
