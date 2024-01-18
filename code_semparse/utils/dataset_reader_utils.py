@@ -27,13 +27,18 @@ def simplify_overnight(examples):
         ex["dcs_simplified"] = simplify_overnight_expr(ex["dcs"])
 
 
-def get_dataset(dataset_name: str, split_name: str, eval_set: str = None, domain: str = None):
+def get_dataset(dataset_name: str, split_name: str, eval_set: str = None, domain: str = None, special_path: str = None):
     if domain is None:
         dataset_path = f"../datasets/{dataset_name}/all.jsonl"
         split_path = f"../datasets/{dataset_name}/splits/{split_name}/split.json"
     else:
         dataset_path = f"../datasets/{dataset_name}/{domain}.all.jsonl"
         split_path = f"../datasets/{dataset_name}/splits/{split_name}/{domain}.json"
+    if special_path is not None:
+        with open(special_path) as f1:
+            converted_example_subset = [json.loads(line) for line in f1]
+            converted_example_subset = {ex["qid"]: ex for ex in converted_example_subset}
+            converted_qids = converted_example_subset.keys()
 
     with open(dataset_path, "r") as f:
         all_original_examples = [json.loads(line) for line in f]
@@ -43,7 +48,12 @@ def get_dataset(dataset_name: str, split_name: str, eval_set: str = None, domain
     elif dataset_name == "overnight":
         simplify_overnight(all_original_examples)
 
-    qid_to_example = {ex["qid"]: ex for ex in all_original_examples}
+    if special_path is not None:
+        qid_to_example_train = {ex["qid"]: ex for ex in all_original_examples if ex['qid'] in converted_qids}
+        qid_to_example_test = {ex["qid"]: ex for ex in all_original_examples} 
+    else:
+        qid_to_example_train = {ex["qid"]: ex for ex in all_original_examples }
+        qid_to_example_test = qid_to_example_train
 
     for ex in all_original_examples:
         ex["dataset"] = dataset_name
@@ -55,12 +65,18 @@ def get_dataset(dataset_name: str, split_name: str, eval_set: str = None, domain
                 all_pl_programs = [json.loads(line) for line in f]
 
             for ex in all_pl_programs:
-                if ex["qid"] in qid_to_example:
-                    qid_to_example[ex["qid"]][pl] = ex[pl]
+                if ex["qid"] in qid_to_example_train:
+                    qid_to_example_train[ex["qid"]][pl] = ex[pl]
                     if "python_oneline" in ex:
-                        qid_to_example[ex["qid"]]["python_oneline"] = ex["python_oneline"]
+                        qid_to_example_train[ex["qid"]]["python_oneline"] = ex["python_oneline"]
                     if "python_multiline" in ex:
-                        qid_to_example[ex["qid"]]["python_multiline"] = ex["python_multiline"]
+                        qid_to_example_train[ex["qid"]]["python_multiline"] = ex["python_multiline"]
+                if ex["qid"] in qid_to_example_test:
+                    qid_to_example_test[ex["qid"]][pl] = ex[pl]
+                    if "python_oneline" in ex:
+                        qid_to_example_test[ex["qid"]]["python_oneline"] = ex["python_oneline"]
+                    if "python_multiline" in ex:
+                        qid_to_example_test[ex["qid"]]["python_multiline"] = ex["python_multiline"]
 
     if split_name is None:
         return all_original_examples, all_original_examples
@@ -68,7 +84,7 @@ def get_dataset(dataset_name: str, split_name: str, eval_set: str = None, domain
         with open(split_path, "r") as f:
             split = json.load(f)
             train_qids = split["train"]
-            train_examples = [qid_to_example[qid] for qid in train_qids]
+            train_examples = [converted_example_subset[qid] for qid in train_qids if qid in qid_to_example_train]
 
             if eval_set is None:
                 if "dev" in split:
@@ -85,6 +101,6 @@ def get_dataset(dataset_name: str, split_name: str, eval_set: str = None, domain
             print(f"Loading {test_set_name} set for {dataset_name}/{split_name}")
 
             test_qids = split[test_set_name]
-            test_examples = [qid_to_example[qid] for qid in test_qids]
+            test_examples = [qid_to_example_test[qid] for qid in test_qids if qid in qid_to_example_test]
 
         return train_examples, test_examples

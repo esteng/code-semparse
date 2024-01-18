@@ -2,7 +2,7 @@
 from typing import Callable
 
 from eval.geo880.funql import evaluate_geo_funql
-from eval.geo880.python import evaluate_geo_python
+# from eval.geo880.python import evaluate_geo_python
 from eval.overnight.dcs import evaluate_overnight_dcs
 from eval.overnight.python import evaluate_overnight_python
 from eval.pl_to_python import GPTPLToPythonConverter
@@ -38,9 +38,9 @@ def evaluate_pl(eval_fn: Callable):
 
 dataset_and_mr_to_eval_func = {
     "geo880": {
-        "python": evaluate_geo_python,
-        "scala": evaluate_pl(evaluate_geo_python),
-        "javascript": evaluate_pl(evaluate_geo_python),
+        # "python": evaluate_geo_python,
+        # "scala": evaluate_pl(evaluate_geo_python),
+        # "javascript": evaluate_pl(evaluate_geo_python),
         "funql": evaluate_geo_funql,
         "prolog": exact_match_eval,
     },

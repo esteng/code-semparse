@@ -32,7 +32,7 @@ def cache(list_key):
 
     def _cache_file(*args, **kwargs):
         """Return the path to the cache file"""
-        return os.path.join("/Users/benb/.cache/llm", _hash(*args, **kwargs) + ".json")
+        return os.path.join("/nas-ssd2/esteng/.cache/llm", _hash(*args, **kwargs) + ".json")
 
     def _cache(*args, **kwargs):
         """Return the cached output if it exists, otherwise return None"""
