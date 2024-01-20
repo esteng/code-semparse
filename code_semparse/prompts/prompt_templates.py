@@ -11,6 +11,7 @@ query: {{query}}
 solution: ```
 {{test_solution_prefix}}""".lstrip()
 
+
 PY_TO_PL_TEMPLATE = """
 Given the following python data structures and functions:
 {{python_structure}}

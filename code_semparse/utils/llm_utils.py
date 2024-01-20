@@ -2,6 +2,8 @@ import hashlib
 import sys
 import json
 import os
+import re
+import pdb 
 from tenacity import (
     retry,
     stop_after_attempt,
@@ -14,6 +16,7 @@ import logging
 import dotenv
 from tqdm import tqdm
 
+from program_refactoring.model.hf_model import LemurModel, CodeLlamaModel
 
 dotenv.load_dotenv()
 
@@ -186,20 +189,69 @@ def complete_prompts(prompts, model_name, stop=None):
             })
 
         return output
+    
+
+def llama_prompt_maker(prompt):
+    # remove weird quote 
+    prompt = re.sub(r'\n"\n', '', prompt)
+    # move the ```
+    prompt = re.sub("query: ", "```\nquery: ", prompt, flags=re.MULTILINE)
+    prompt = re.sub("solution: ```", "solution: ", prompt, flags=re.MULTILINE)
+    prompt = re.sub("```python", "```", prompt, flags=re.MULTILINE)
+    # replace ```<snippet>``` with [PYTHON]<snippet>[/PYTHON]
+    prompt = re.sub(r"```(.*?)```", r"[PYTHON]\1[/PYTHON]", prompt, flags=re.DOTALL|re.MULTILINE)
+    # replace final 
+    prompt = re.sub(r"```\nquery:", "[PYTHON]\nquery:", prompt, flags=re.MULTILINE)
+
+    # remove consecutive PYTHON tags
+    prompt = re.sub(r"\[/PYTHON\]\n*\[PYTHON\]", r"\n", prompt, flags=re.MULTILINE)
+
+    # add in the first [INST] tags
+    prompt = re.sub("Given the following data structures and functions:", "[INST]\nGiven the following data structures and functions:\n[/INST]", prompt, flags=re.MULTILINE)
+    prompt = re.sub("Write code to solve the following queries:", "[INST]\nWrite code to solve the following queries:\n[/INST]", prompt, flags=re.MULTILINE)
+    prompt = re.sub("You can also use the following helper functions to help you write your code:", "[INST]\nYou can also use the following helper functions to help you write your code:\n[/INST]", prompt, flags=re.MULTILINE)
+
+    # comment question and solution
+    prompt = re.sub(r"query:(.*)", r"# Query:\1", prompt, flags=re.MULTILINE)
+    prompt = re.sub(r"solution:", r"# Solution:", prompt, flags=re.DOTALL|re.MULTILINE)
+    return prompt 
+    
+
+def lemur_prompt_maker(prompt):
+    pass
+
+def complete_prompts_batched(prompts, model_name, stop=None, batch_size=10):
+    if "llama" in model_name:
+        model = CodeLlamaModel(model_name)
+        prompt_modifier = llama_prompt_maker
+    else:
+        model = LemurModel(model_name)
+        prompt_modifier = lemur_prompt_maker
+    prompts = [prompt_modifier(p) for p in prompts]
+    results = model.run_multiple(prompts, 
+                                batch_size=batch_size, 
+                                infilling=False, 
+                                agent=True,
+                                language="PYTHON",
+                                comment_tok="#")
+    return results
 
 
 def complete_all(prompts, model_name, stop=None, batch_size=10):
     all_predictions = []
 
-    if True or "gpt-3.5-turbo" in model_name or model_name == "gpt-4":
+    if "gpt-3.5-turbo" in model_name or model_name == "gpt-4":
         # doesn't support batching...
         for prompt in tqdm(prompts, desc=f"Generating {model_name} predictions"):
             predictions = complete_prompts(prompts=[prompt], model_name=model_name, stop=stop)
             all_predictions += [p["text"].strip("` \n").rstrip() for p in predictions]
     else:
-        prompt_batches = [prompts[i:i + batch_size] for i in range(0, len(prompts), batch_size)]
-        for batch in tqdm(prompt_batches, desc=f"Generating {model_name} predictions"):
-            predictions = complete_prompts(prompts=batch, model_name=model_name, stop=stop)
-            all_predictions += [p["text"].strip("` \n").rstrip() for p in predictions]
+        all_predictions = complete_prompts_batched(prompts=prompts, model_name=model_name, stop=stop, batch_size=batch_size)
+
+
+        # prompt_batches = [prompts[i:i + batch_size] for i in range(0, len(prompts), batch_size)]
+        # for batch in tqdm(prompt_batches, desc=f"Generating {model_name} predictions"):
+        #     predictions = complete_prompts(prompts=batch, model_name=model_name, stop=stop)
+        #     all_predictions += [p["text"].strip("` \n").rstrip() for p in predictions]
 
     return all_predictions

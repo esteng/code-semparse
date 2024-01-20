@@ -1,10 +1,13 @@
 import argparse
 import os
+import json 
 import re 
 from random import Random
 from typing import Dict, List
 from pathlib import Path 
 import pdb 
+import numpy as np
+np.random.seed(12)
 
 import numpy as np
 import pandas as pd
@@ -43,6 +46,7 @@ def get_args():
     args.add_argument("--do_filter", action="store_true")
     args.add_argument("--budget_split", type=float, default=0.5)
     args.add_argument("--special_path", type=str, default=None)
+    args.add_argument("--batch_size", type=int, default=5)
     return args.parse_args()
 
 def get_helper_functions(log_demonstrations, codebank):
@@ -79,7 +83,7 @@ def evaluate_prompt_on_set(demonstrations_selector: DemonstrationsSelector,
                            log_demonstrations_selector: DemonstrationsSelector,
                            test_examples: List[Dict], model: str, datatset_name: str,
                            prompt_lang: str, prompt_method: str, program_variation: str = None,
-                           codebank: CodeBank = None) -> List[Dict]:
+                           codebank: CodeBank = None, batch_size: int = 5) -> List[Dict]:
     demonstrations = []
     prompts_for_examples = []
     for ex in tqdm(test_examples):
@@ -91,9 +95,10 @@ def evaluate_prompt_on_set(demonstrations_selector: DemonstrationsSelector,
             # pdb.set_trace() 
         else:
             helper_function_text = None
+        np.random.shuffle(ex_demonstrations)
         demonstrations.append(ex_demonstrations)
         prompts_for_examples.append(create_prompt(ex, prompt_lang, prompt_method, ex_demonstrations, datatset_name, program_variation, helper_function_text))
-    model_predictions = complete_all(prompts_for_examples, model, stop="```")
+    model_predictions = complete_all(prompts_for_examples, model, stop="```", batch_size=batch_size)
 
     results = []
     loop = tqdm(zip(test_examples, prompts_for_examples, model_predictions),
@@ -154,12 +159,17 @@ def run_experiment(dataset_name: str, split_name: str, n_training_demonstrations
                    prompt_lang: str, prompt_method: str, program_variation: str = None,
                    icl_selection_method: str = "fixed_random", eval_set: str = None,
                    seed: int = 42, test_seed: int = 42, overnight_domain: str = None, allow_cache=True,
-                   logdir: Path = None, budget_split: float = 0.5, do_filter: bool = False, special_path: str = None) -> pd.DataFrame:
+                   logdir: Path = None, budget_split: float = 0.5, do_filter: bool = False, special_path: str = None,
+                   batch_size: int = 5) -> pd.DataFrame:
     has_logdir = logdir is not None
     exp_parameters = [model, dataset_name, split_name, n_training_demonstrations, n_test_samples, prompt_lang, prompt_method, program_variation, icl_selection_method, seed, has_logdir]
     if eval_set is not None:
         exp_parameters.append(eval_set)
-    output_path = f"../output/results_{'_'.join([str(p) for p in exp_parameters]).replace('/', '-')}.csv"
+    if logdir is None:
+        output_path = f"../output/baseline/results_{'_'.join([str(p) for p in exp_parameters]).replace('/', '-')}.csv"
+    else:
+        output_path = f"../output/from_{logdir.name}/results_{'_'.join([str(p) for p in exp_parameters]).replace('/', '-')}.csv"
+
 
     if allow_cache and os.path.exists(output_path):
         print(f"Skipping experiment {output_path} because it already exists")
@@ -186,13 +196,14 @@ def run_experiment(dataset_name: str, split_name: str, n_training_demonstrations
                                  tc_class=OvernightTestCase,
                                  task="overnight")
         if do_filter:
-            codebank.filter(round_idx=-1, success_thresh=0, min_usage=4, keep_low_usage=True, max_round_delta=40)
+            codebank.filter(round_idx=-1, success_thresh=0.0, min_usage=4, keep_low_usage=True, max_round_delta=40)
             logdir_training_set = filter_training_data(logdir_training_set, codebank)
         codebank.write_to_file()
         # filter 
         n_log_demonstrations = int(n_training_demonstrations * budget_split)
         n_training_demonstrations = n_training_demonstrations - n_log_demonstrations
-
+        # no double select 
+        training_set = [x for x in training_set if x['qid'] not in [y['qid'] for y in logdir_training_set]]
         log_demonstrations_selector = get_demonstrations_selector(icl_selection_method, logdir_training_set, n_log_demonstrations, prompt_lang, seed=seed)
         main_demonstrations_selector = get_demonstrations_selector(icl_selection_method, training_set, n_training_demonstrations, prompt_lang, seed=seed)
 
@@ -215,7 +226,8 @@ def run_experiment(dataset_name: str, split_name: str, n_training_demonstrations
                                      prompt_lang, 
                                      prompt_method, 
                                      program_variation,
-                                     codebank=codebank)
+                                     codebank=codebank,
+                                     batch_size=batch_size)
 
     # save to csv
     df = pd.DataFrame(results)
@@ -223,6 +235,10 @@ def run_experiment(dataset_name: str, split_name: str, n_training_demonstrations
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     print(df.select_dtypes(include=np.number).mean())
+
+    output_parent = Path(output_path).parent
+    with open(output_parent/"stats.json", "w") as f: 
+        json.dump(df.select_dtypes(include=np.number).mean().to_dict(), f)
     print(f"Saving results to {output_path}")
     df.to_csv(output_path, index=False)
 
@@ -234,4 +250,5 @@ if __name__ == "__main__":
 
     run_experiment(args.dataset_name, args.split_name, args.n_training_demonstrations, args.n_test_samples, args.model,
                    args.prompt_lang, args.prompt_method, args.program_variation, args.icl_selection_method, args.eval_set_name, overnight_domain=args.overnight_domain,
-                   logdir=args.logdir, budget_split=args.budget_split, do_filter=args.do_filter, special_path=args.special_path)
+                   logdir=args.logdir, budget_split=args.budget_split, do_filter=args.do_filter, special_path=args.special_path,
+                   batch_size=args.batch_size)

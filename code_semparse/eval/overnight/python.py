@@ -26,9 +26,8 @@ def evaluate_overnight_python_node(prediction, ex, prompt_method):
     node = OvernightNode(query = ex['query'], program = prediction, type='pred', name=ex['qid'], temp_dir="temp")
     result = node.execute(use_pkl=True)
 
-    # pdb.set_trace()
     gold_answer = execute_dcs(ex["dcs"], ex["domain"])
-
+    # pdb.set_trace()
     parsed_pred_answer = set()
     if result is not None:
         parsed_pred_answer = value_to_string(result) 

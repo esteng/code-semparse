@@ -1,9 +1,9 @@
 import sys
-sys.path.insert(0, '/nas-ssd2/esteng/program_refactoring/third_party/code-semparse/code_semparse/')
 import json
 import pickle as pkl
-from temp.codebank import *
+sys.path.insert(0, '/nas-ssd2/esteng/program_refactoring/third_party/code-semparse/code_semparse/')
 from eval.overnight.data.datamodel import *
+from temp.codebank import *
 from temp.codebank import *
 api = API.from_file('/nas-ssd2/esteng/program_refactoring/third_party/code-semparse/code_semparse/eval/overnight/data/db_socialnetwork.json')
 

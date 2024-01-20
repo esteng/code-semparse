@@ -44,6 +44,9 @@ class API:
 
         db = SocialNetworkDB.from_file(path)
         for db_person in db.people:
+            # if db_person.name == "en.person.56": 
+            #     import pdb 
+            #     pdb.set_trace()
             person_by_id[db_person.name] = Person(
                 name=db_person.name,
                 gender=Gender[db_person.gender.split(".")[-1]],
@@ -51,7 +54,7 @@ class API:
                 height=int(db_person.height),
                 birthdate=int(db_person.birthdate),
                 birthplace=db_person.birthplace,
-                logged_in=db_person.logged_in == "true",
+                logged_in=str(db_person.logged_in).lower() == "true",
                 friends=[],
                 education=[],
                 employment=[]
