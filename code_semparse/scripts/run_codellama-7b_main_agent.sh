@@ -14,7 +14,7 @@ python run_experiment.py \
 	--dataset_name overnight \
 	--overnight_domain socialnetwork \
 	--split_name iid_with_dev \
-	--n_training_demonstrations 10 \
+	--n_training_demonstrations 8 \
 	--n_test_samples 100 \
 	--prompt_lang python \
 	--icl_selection_method bm25_utt  \
@@ -27,6 +27,8 @@ python run_experiment.py \
 	--n_training_demonstrations ${demos}	\
 	--max_helpers ${max_helpers} \
 	--budget_split ${split} \
-	--seed 42 \
+	--seed 12 \
 	--prompt_idx 1 \
-	--batch_size 8
+	--batch_size 8 \
+	--cut_low_usage \
+	--filter_min_usage 3 

@@ -13,7 +13,7 @@ do
 		--overnight_domain socialnetwork \
 		--split_name iid_with_dev \
 		--n_training_demonstrations 10 \
-		--n_test_samples 100 \
+		--n_test_samples 24 \
 		--prompt_lang python \
 		--icl_selection_method bm25_utt  \
 		--prompt_method full_dd \
@@ -35,7 +35,7 @@ do
 			--overnight_domain socialnetwork \
 			--split_name iid_with_dev \
 			--n_training_demonstrations 10 \
-			--n_test_samples 100 \
+			--n_test_samples 24 \
 			--prompt_lang python \
 			--icl_selection_method bm25_utt  \
 			--prompt_method full_dd \

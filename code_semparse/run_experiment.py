@@ -189,8 +189,8 @@ def run_experiment(dataset_name: str, split_name: str, n_training_demonstrations
     has_logdir = logdir is not None
     exp_parameters = [model, dataset_name, split_name, n_training_demonstrations, 
                       n_test_samples, prompt_lang, prompt_method, program_variation, 
-                      icl_selection_method, seed, has_logdir, budget_split,
-                      max_helpers, f"prompt_{prompt_idx}", filter_threshold, cut_low_usage, filter_min_usage]
+                      icl_selection_method, seed, has_logdir, f"split_{budget_split}",
+                      f"helpers_{max_helpers}", f"prompt_{prompt_idx}", f"thresh_{filter_threshold}", f"cut_{cut_low_usage}", f"min_use_{filter_min_usage}"]
     if eval_set is not None:
         exp_parameters.append(eval_set)
     param_str = "_".join([str(p) for p in exp_parameters])
@@ -198,14 +198,14 @@ def run_experiment(dataset_name: str, split_name: str, n_training_demonstrations
     param_str = re.sub(r"/","_", param_str)
     param_str = re.sub(r"\.","dot", param_str)
     if logdir is None:
-        output_path = f"/nas-ssd2/esteng/program_refactoring/third_party/code-semparse/output4/baseline/results_{param_str}.csv"
+        output_path = f"/nas-ssd2/esteng/program_refactoring/third_party/code-semparse/output4/baseline/results_{param_str}/results.csv"
     else:
         safe_logdir_name = re.sub("[///-]", "_", logdir.name) 
-        output_path = f"/nas-ssd2/esteng/program_refactoring/third_party/code-semparse/output4/from_{safe_logdir_name}/results_{param_str}.csv"
+        output_path = f"/nas-ssd2/esteng/program_refactoring/third_party/code-semparse/output4/from_{safe_logdir_name}/results_{param_str}/results.csv"
     output_path = Path(output_path).absolute()
 
     output_path.parent.mkdir(exist_ok=True, parents=True)
-    with open(output_path.parent/"args.json", "w") as f1:
+    with open(output_path/"args.json", "w") as f1:
         arg_dict = {k:str(v) for k,v in args.__dict__.items()}
         json.dump(arg_dict, f1)
 
