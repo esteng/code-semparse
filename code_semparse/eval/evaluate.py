@@ -61,7 +61,7 @@ dataset_and_mr_to_eval_func = {
 }
 
 
-def evaluate(prediction, ex, datatset_name, prompt_lang):
+def evaluate(prediction, ex, datatset_name, prompt_lang, temp_dir=None):
     if datatset_name not in dataset_and_mr_to_eval_func:
         raise ValueError(f"Eval for dataset {datatset_name} is not supported")
     if prompt_lang not in dataset_and_mr_to_eval_func[datatset_name]:
@@ -69,4 +69,4 @@ def evaluate(prediction, ex, datatset_name, prompt_lang):
 
     eval_fn = dataset_and_mr_to_eval_func[datatset_name][prompt_lang]
 
-    return eval_fn(prediction, ex, prompt_lang)
+    return eval_fn(prediction, ex, prompt_lang, temp_dir=temp_dir)

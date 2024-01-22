@@ -1,0 +1,142 @@
+[INST]
+Given the following data structures and functions:
+[/INST][PYTHON]
+Gender = Enum('Gender', 'male,female')
+RelationshipStatus = Enum('RelationshipStatus', 'single,married')
+Education = NamedTuple('Education', [('university', str), ('field_of_study', str), ('start_date', int), ('end_date', int)])
+Employment = NamedTuple('Employment', [('employer', str), ('job_title', str), ('start_date', int), ('end_date', int)])
+
+@dataclass
+class Person:
+    name: str
+    gender: Gender
+    relationship_status: RelationshipStatus
+    height: int
+    birthdate: int
+    birthplace: str
+    friends: List['Person'] = None
+    logged_in: bool = False
+
+    education: List[Education] = None
+    employment: List[Employment] = None
+
+
+@dataclass
+class API:
+    people: List[Block]
+    
+    def find_person_by_id(self, block_id: str) -> Person:
+        ...
+
+api = API()
+[/PYTHON]
+[INST]
+You can also use the following helper functions to help you write your code:
+[/INST]
+[PYTHON]
+# Helper functions
+
+def is_start_date_before(date):
+
+    return date < 2004 or date < 2010
+def has_start_date_after_or(person, year1, year2):
+
+    return any((e.start_date > year1 or e.start_date > year2 for e in person.education))
+def has_start_date(person, year1, year2):
+
+    return any((e.start_date == year1 or e.start_date == year2 for e in person.education))
+def is_student_with_education_start_after(person):
+
+    if person.education and any((e.start_date > 2004 for e in person.education)):
+        return True
+    return False
+
+[/PYTHON]
+
+
+[INST]
+Write code to solve the following queries:
+[/INST]
+[PYTHON]
+# Query: employee whose start date is at least 2004 or 2010
+# Solution: 
+def answer():
+    employees_started_working_by_2004_or_2010 = [person for person in api.people if person.employment and any(e.start_date >= 2004 or e.start_date >= 2010 for e in person.employment)]
+    return employees_started_working_by_2004_or_2010
+
+
+# Query: student whose end date is at least 2004 or 2010
+# Solution: 
+def answer():
+    students_ended_by_2004_or_2010 = [person for person in api.people if person.education and any(e.end_date >= 2004 or e.end_date >= 2010 for e in person.education)]
+    return students_ended_by_2004_or_2010
+
+
+# Query: student whose start date is larger than 2004 or 2010
+# Solution: 
+
+
+def answer():
+    students_started_after_2004_or_2010 = [person for person in api.people if person.education and has_start_date_after_or(person, 2004, 2010)]
+    return students_started_after_2004_or_2010
+
+
+# Query: employee whose start date is smaller than 2004 or 2010
+# Solution: 
+
+
+def answer():
+    employees_started_before_2004_or_2010 = [person for person in api.people if person.employment and any((is_start_date_before(e.start_date) for e in person.employment))]
+    return employees_started_before_2004_or_2010
+
+
+# Query: student whose start date is larger than 2004 or 2010
+# Solution: 
+
+
+def answer():
+    students_started_after_2004_or_2010 = [person for person in api.people if person.education and (is_student_with_education_start_after(person) or any((e.start_date > 2010 for e in person.education)))]
+    return students_started_after_2004_or_2010
+
+
+# Query: student whose start date is smaller than 2004
+# Solution: 
+def answer():
+    students_started_before_2004 = [person for person in api.people if person.education and any(e.start_date < 2004 for e in person.education)]
+    return students_started_before_2004
+
+
+# Query: student whose start date is 2004 or 2010
+# Solution: 
+def answer():
+    students = [person for person in api.people if person.education and any(e.start_date == 2004 or e.start_date == 2010 for e in person.education)]
+    return students
+
+
+# Query: employee whose end date is 2004 or 2010
+# Solution: 
+def answer():
+    employees = [person for person in api.people if person.employment and any(e.end_date == 2004 or e.end_date == 2010 for e in person.employment)]
+    return employees
+
+
+# Query: employee whose start date is smaller than 2004 or 2010
+# Solution: 
+
+
+def answer():
+    employees_started_before_2004_or_2010 = [person for person in api.people if person.employment and any((is_start_date_before(e.start_date) for e in person.employment))]
+    return employees_started_before_2004_or_2010
+
+
+# Query: student whose start date is 2004 or 2010
+# Solution: 
+
+
+def answer():
+    students = [person for person in api.people if person.education and has_start_date(person, 2004, 2010)]
+    return students
+
+
+# Query: student whose start date is smaller than 2004 or 2010
+# Solution: 

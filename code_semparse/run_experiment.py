@@ -6,9 +6,8 @@ from random import Random
 from typing import Dict, List
 from pathlib import Path 
 import pdb 
-import numpy as np
-np.random.seed(12)
 
+import torch
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -35,8 +34,9 @@ def get_args():
     args.add_argument("--split_name", type=str, default="tmcd_1")
     args.add_argument("--eval_set_name", type=str, default="valid")
     args.add_argument("--n_training_demonstrations", type=int, default=3)
-    args.add_argument("--n_test_samples", type=int, default=60)
+    args.add_argument("--n_test_samples", type=int, default=100)
     args.add_argument("--model", type=str, default="gpt-3.5-turbo")
+    args.add_argument("--seed", default=42, type=int)
     args.add_argument("--prompt_lang", type=str)
     args.add_argument("--prompt_method", type=str)
     args.add_argument("--program_variation", type=str)
@@ -47,18 +47,39 @@ def get_args():
     args.add_argument("--budget_split", type=float, default=0.5)
     args.add_argument("--special_path", type=str, default=None)
     args.add_argument("--batch_size", type=int, default=5)
+    args.add_argument("--max_helpers", type=int, default=20)
+    args.add_argument("--prompt_idx", type=int, default=0)
+    args.add_argument("--filter_threshold", type=float, default=0.0)
+    args.add_argument("--cut_low_usage", action="store_true")
+    args.add_argument("--filter_min_usage", type=int, default=4)
     return args.parse_args()
 
-def get_helper_functions(log_demonstrations, codebank):
+def get_helper_functions(log_demonstrations, query, codebank, removed=[], max_helpers=20):
     helper_function_text = "# Helper functions\n\n"
     all_funcs_used = []
     for d in log_demonstrations:
         functions_used = get_func_names(d["python"])
-        all_funcs_used += functions_used
-    # limit to 20 helper funcs
-    for f in list(set(all_funcs_used))[0:20]: 
-        code = codebank._codebank[f]._original_code
-        helper_function_text += code + "\n"
+        for func in functions_used:
+            if func not in all_funcs_used: 
+                all_funcs_used.append(func)
+    # limit to 20 max 
+    all_funcs_used = all_funcs_used[0:max_helpers]
+    # fill with other codebank fxns  
+    relevant_fxns = codebank.get_relevant(query_desc = query, k = max(0, max_helpers - len(all_funcs_used)))
+
+    all_funcs_used += relevant_fxns
+
+    added = 0
+    for f in list(set(all_funcs_used)): 
+        try:
+            code = codebank._codebank[f]._original_code
+            helper_function_text += code + "\n"
+            added += 1
+        except KeyError:
+            pass
+            # assert(f in removed)
+            # print('skipped')
+    print(f"added {added} helper functions")
 
 
 
@@ -83,21 +104,24 @@ def evaluate_prompt_on_set(demonstrations_selector: DemonstrationsSelector,
                            log_demonstrations_selector: DemonstrationsSelector,
                            test_examples: List[Dict], model: str, datatset_name: str,
                            prompt_lang: str, prompt_method: str, program_variation: str = None,
-                           codebank: CodeBank = None, batch_size: int = 5) -> List[Dict]:
+                           codebank: CodeBank = None, batch_size: int = 5, removed: list = None,
+                           temp_dir: Path = None, max_helpers: int = 20, prompt_idx: int = 0) -> List[Dict]:
     demonstrations = []
     prompts_for_examples = []
     for ex in tqdm(test_examples):
         ex_demonstrations = demonstrations_selector.pick_demonstrations(ex)
         if log_demonstrations_selector is not None:
             log_demonstrations = log_demonstrations_selector.pick_demonstrations(ex)
-            helper_function_text = get_helper_functions(log_demonstrations, codebank)
+            helper_function_text = get_helper_functions(log_demonstrations, ex['query'], codebank, removed, max_helpers)
             ex_demonstrations += log_demonstrations
             # pdb.set_trace() 
         else:
             helper_function_text = None
         np.random.shuffle(ex_demonstrations)
         demonstrations.append(ex_demonstrations)
-        prompts_for_examples.append(create_prompt(ex, prompt_lang, prompt_method, ex_demonstrations, datatset_name, program_variation, helper_function_text))
+        prompts_for_examples.append(create_prompt(ex, prompt_lang, prompt_method, ex_demonstrations, 
+                                                  datatset_name, program_variation, helper_function_text, 
+                                                  prompt_idx))
     model_predictions = complete_all(prompts_for_examples, model, stop="```", batch_size=batch_size)
 
     results = []
@@ -108,8 +132,7 @@ def evaluate_prompt_on_set(demonstrations_selector: DemonstrationsSelector,
             "qid": ex["qid"],
             "query": ex["query"],
         }
-
-        metrics = evaluate(prediction, ex, datatset_name, prompt_lang)
+        metrics = evaluate(prediction, ex, datatset_name, prompt_lang, temp_dir=temp_dir)
 
         result[f"prediction"] = prediction
         result[f"prompt"] = prompt
@@ -160,24 +183,47 @@ def run_experiment(dataset_name: str, split_name: str, n_training_demonstrations
                    icl_selection_method: str = "fixed_random", eval_set: str = None,
                    seed: int = 42, test_seed: int = 42, overnight_domain: str = None, allow_cache=True,
                    logdir: Path = None, budget_split: float = 0.5, do_filter: bool = False, special_path: str = None,
-                   batch_size: int = 5) -> pd.DataFrame:
+                   batch_size: int = 5, max_helpers: int = 20, prompt_idx: int = 0, 
+                   filter_threshold: float = 0.0, cut_low_usage: bool = True, filter_min_usage: int = 4, args = None) -> pd.DataFrame:
+
     has_logdir = logdir is not None
-    exp_parameters = [model, dataset_name, split_name, n_training_demonstrations, n_test_samples, prompt_lang, prompt_method, program_variation, icl_selection_method, seed, has_logdir]
+    exp_parameters = [model, dataset_name, split_name, n_training_demonstrations, 
+                      n_test_samples, prompt_lang, prompt_method, program_variation, 
+                      icl_selection_method, seed, has_logdir, budget_split,
+                      max_helpers, f"prompt_{prompt_idx}", filter_threshold, cut_low_usage, filter_min_usage]
     if eval_set is not None:
         exp_parameters.append(eval_set)
+    param_str = "_".join([str(p) for p in exp_parameters])
+    param_str = re.sub(r"-","_", param_str)
+    param_str = re.sub(r"/","_", param_str)
+    param_str = re.sub(r"\.","dot", param_str)
     if logdir is None:
-        output_path = f"../output/baseline/results_{'_'.join([str(p) for p in exp_parameters]).replace('/', '-')}.csv"
+        output_path = f"/nas-ssd2/esteng/program_refactoring/third_party/code-semparse/output4/baseline/results_{param_str}.csv"
     else:
-        output_path = f"../output/from_{logdir.name}/results_{'_'.join([str(p) for p in exp_parameters]).replace('/', '-')}.csv"
+        safe_logdir_name = re.sub("[///-]", "_", logdir.name) 
+        output_path = f"/nas-ssd2/esteng/program_refactoring/third_party/code-semparse/output4/from_{safe_logdir_name}/results_{param_str}.csv"
+    output_path = Path(output_path).absolute()
+
+    output_path.parent.mkdir(exist_ok=True, parents=True)
+    with open(output_path.parent/"args.json", "w") as f1:
+        arg_dict = {k:str(v) for k,v in args.__dict__.items()}
+        json.dump(arg_dict, f1)
+
+    if logdir is None:
+        # write an empty codebank.py file to output dir 
+        os.makedirs(output_path.parent, exist_ok=True)
+        with open(output_path.parent/"codebank.py", "w") as f:
+            f.write("")
 
 
-    if allow_cache and os.path.exists(output_path):
+    if allow_cache and output_path.exists():
         print(f"Skipping experiment {output_path} because it already exists")
         df = pd.read_csv(output_path)
         return df
 
     training_set, test_set = get_dataset(dataset_name, split_name, eval_set, overnight_domain, special_path)
 
+    removed = []
     if logdir is not None:
         # get dcs lookup
         dcs_lut = {x['qid']: (x['dcs'], x['dcs_simplified'], x['original']) for x in training_set}
@@ -186,17 +232,20 @@ def run_experiment(dataset_name: str, split_name: str, n_training_demonstrations
         logdir_training_set = convert_read_data(logdir_training_set, dcs_lut)
         # read codebank 
         logdir = Path(logdir)
+        output_path.parent.mkdir(exist_ok=True, parents=True)
+        # make codebank
+
         codebank = CodeBank.load(logdir / "codebank.py",
                                  logdir / "success_info.json",
                                  logdir / "test_cases.jsonl",
                                  "overnight",
                                  None,
-                                 "temp",
-                                 "temp",
+                                 output_path.parent,
+                                 output_path.parent,
                                  tc_class=OvernightTestCase,
                                  task="overnight")
         if do_filter:
-            codebank.filter(round_idx=-1, success_thresh=0.0, min_usage=4, keep_low_usage=True, max_round_delta=40)
+            removed = codebank.filter(round_idx=-1, success_thresh=filter_threshold, min_usage=filter_min_usage, keep_low_usage=not cut_low_usage, max_round_delta=40)
             logdir_training_set = filter_training_data(logdir_training_set, codebank)
         codebank.write_to_file()
         # filter 
@@ -214,7 +263,7 @@ def run_experiment(dataset_name: str, split_name: str, n_training_demonstrations
 
     sampled_test_set = Random(test_seed).sample(test_set, min(n_test_samples, len(test_set)))
 
-    os.makedirs("../output", exist_ok=True)
+    os.makedirs("../output2", exist_ok=True)
 
     print(
         f"Running {prompt_method} prompt on {n_test_samples} examples from {dataset_name}, {split_name} split")
@@ -227,7 +276,11 @@ def run_experiment(dataset_name: str, split_name: str, n_training_demonstrations
                                      prompt_method, 
                                      program_variation,
                                      codebank=codebank,
-                                     batch_size=batch_size)
+                                     batch_size=batch_size,
+                                     removed = removed,
+                                     temp_dir = output_path.parent,
+                                     max_helpers=max_helpers,
+                                     prompt_idx=prompt_idx)
 
     # save to csv
     df = pd.DataFrame(results)
@@ -236,7 +289,7 @@ def run_experiment(dataset_name: str, split_name: str, n_training_demonstrations
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     print(df.select_dtypes(include=np.number).mean())
 
-    output_parent = Path(output_path).parent
+    output_parent = output_path.parent
     with open(output_parent/"stats.json", "w") as f: 
         json.dump(df.select_dtypes(include=np.number).mean().to_dict(), f)
     print(f"Saving results to {output_path}")
@@ -248,7 +301,14 @@ def run_experiment(dataset_name: str, split_name: str, n_training_demonstrations
 if __name__ == "__main__":
     args = get_args()
 
+    # set all seeds
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
+
     run_experiment(args.dataset_name, args.split_name, args.n_training_demonstrations, args.n_test_samples, args.model,
                    args.prompt_lang, args.prompt_method, args.program_variation, args.icl_selection_method, args.eval_set_name, overnight_domain=args.overnight_domain,
                    logdir=args.logdir, budget_split=args.budget_split, do_filter=args.do_filter, special_path=args.special_path,
-                   batch_size=args.batch_size)
+                   batch_size=args.batch_size, seed=args.seed, test_seed=args.seed, max_helpers = args.max_helpers, prompt_idx=args.prompt_idx, 
+                   filter_threshold = args.filter_threshold, cut_low_usage=args.cut_low_usage, filter_min_usage=args.filter_min_usage,
+                   args = args)

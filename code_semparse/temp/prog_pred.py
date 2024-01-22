@@ -11,8 +11,10 @@ def socialnetwork_train_2653():
     alice = api.find_person_by_id('en.person.alice')
     students_started_on_alices_birthday = []
     for person in api.people:
-        if person.education and any((e.start_date == alice.birthdate for e in person.education)):
-            students_started_on_alices_birthday.append(person)
+        for education in person.education:
+            if education.start_date == alice.birthdate:
+                students_started_on_alices_birthday.append(person)
+                break
     with open('temp/result_pred.json', 'w') as f1:
         json.dump(str(students_started_on_alices_birthday), f1)
     with open('temp/result_pred.pkl', 'wb') as f1:

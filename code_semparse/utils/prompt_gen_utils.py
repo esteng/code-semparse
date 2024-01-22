@@ -5,7 +5,7 @@ from prompts.prompt_templates import MAIN_TEMPLATE, DEMONSTRATIONS_TEMPLATE, TEM
 
 
 def create_prompt(ex: Dict, prompt_lang: str, prompt_type: str, demonstrations: List[Dict], dataset_name: str, program_variation: str = None,
-                  helper_function_text: str = None) -> str:
+                  helper_function_text: str = None, prompt_idx: int = 0) -> str:
     prompt = MAIN_TEMPLATE
 
     demonstration_target_type = prompt_lang
@@ -14,7 +14,7 @@ def create_prompt(ex: Dict, prompt_lang: str, prompt_type: str, demonstrations: 
 
     if prompt_type != "no_dd":
         if helper_function_text is not None and prompt_type == "full_dd":
-            prompt_type = "full_dd_w_helper"
+            prompt_type = f"full_dd_w_helper_{prompt_idx}"
         prompt = prompt.replace("{{structure}}", STRUCTURE_TEMPLATE)
         prompt = prompt.replace("{{structures_for_method}}",
                                 TEMPLATE_PER_DATASET[dataset_name]["structure_per_method"][prompt_lang][prompt_type])

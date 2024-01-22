@@ -22,9 +22,14 @@ def value_to_string(value):
     elif type(value) is int:
         return str(value)
 
-def evaluate_overnight_python_node(prediction, ex, prompt_method):
-    node = OvernightNode(query = ex['query'], program = prediction, type='pred', name=ex['qid'], temp_dir="temp")
-    result = node.execute(use_pkl=True)
+def evaluate_overnight_python_node(prediction, ex, prompt_method, temp_dir):
+    node = OvernightNode(query = ex['query'], 
+                         program = prediction, 
+                         type='pred', 
+                         name=ex['qid'], 
+                         temp_dir=temp_dir, 
+                         extra_imports=[temp_dir])
+    result = node.execute(additional_path=temp_dir/f"{ex['qid']}_pred.py", use_pkl=True)
 
     gold_answer = execute_dcs(ex["dcs"], ex["domain"])
     # pdb.set_trace()
